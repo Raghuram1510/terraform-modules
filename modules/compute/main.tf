@@ -20,12 +20,12 @@ resource "aws_instance" "node" {
         voulme_type = "gp3"
     }
 
-    user_data = templatefile("${path.module}/bootstrap.sh, {
+    user_data = templatefile("${path.module}/bootstrap.sh", {
         node_type = var.node_type
     })
 
     tags = {
-        name = "${var.cluster_name}-${var.environment}-${var.node_type}-${count.index + 1}"
+        Name = "${var.cluster_name}-${var.environment}-${var.node_type}-${count.index + 1}"
     Environment = var.environment
     }
 }# Terraform module
