@@ -28,4 +28,4 @@ resource "aws_instance" "node" {
         name = "${var.cluster_name}-${var.environment}-${var.node_type}-${count.index + 1}"
     Environment = var.environment
     }
-}
+}# Terraform module
