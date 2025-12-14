@@ -1,39 +1,39 @@
 variable "cluster_name" {
-    description = "Name of the cluster"
-    type        = string
+  description = "Name of the cluster"
+  type        = string
 }
 
 variable "environment" {
-    description = "Enivronment"
-    type        = string    
+  description = "Enivronment"
+  type        = string
 }
 
 variable "node_type" {
-    description = "Worker or master"
-    type = string
-    default = "worker"
+  description = "Worker or master"
+  type        = string
+  default     = "worker"
 }
 
 variable "instance_type" {
-    type = string
-    default = "t3.medium" 
+  type    = string
+  default = "t3.medium"
 }
 
 variable "subnet_id" {
-    type = string
+  type = string
 }
 
 variable "iam_instance_profile" {
-    type = string
+  type = string
 }
 
 variable "key_name" {
-    description = "Key name for SSH"
-    type = string
-    default = ""
+  description = "Key name for SSH"
+  type        = string
+  default     = ""
 }
 
 variable "instance_count" {
-    type = number
-    default = 1 
+  type    = number
+  default = 1
 }
