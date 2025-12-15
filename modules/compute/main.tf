@@ -12,7 +12,7 @@ resource "aws_instance" "node" {
   ami                  = data.aws_ami.amazon_linux.id
   instance_type        = var.instance_type
   subnet_id            = var.subnet_id
-  iam_instance_profile = var.instance_profile
+  iam_instance_profile = var.iam_instance_profile
   key_name             = var.key_name != "" ? var.key_name : null
 
   root_block_device {
