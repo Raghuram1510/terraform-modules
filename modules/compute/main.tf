@@ -7,6 +7,10 @@ data "aws_ami" "amazon_linux" {
   }
 }
 
+locals {
+  user_data = var.user_data_file != "" ? file(var.user_data_file) : null
+}
+
 resource "aws_instance" "node" {
   count                = var.instance_count
   ami                  = data.aws_ami.amazon_linux.id
@@ -17,12 +21,10 @@ resource "aws_instance" "node" {
 
   root_block_device {
     volume_size = 20
-    voulme_type = "gp3"
+    volume_type = "gp3"
   }
 
-  user_data = templatefile("${path.module}/bootstrap.sh", {
-    node_type = var.node_type
-  })
+  user_data = local.user_data
 
   tags = {
     Name        = "${var.cluster_name}-${var.environment}-${var.node_type}-${count.index + 1}"

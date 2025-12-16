@@ -4,7 +4,7 @@ variable "cluster_name" {
 }
 
 variable "environment" {
-  description = "Enivronment"
+  description = "Environment"
   type        = string
 }
 
@@ -36,4 +36,10 @@ variable "key_name" {
 variable "instance_count" {
   type    = number
   default = 1
+}
+
+variable "user_data_file" {
+  description = "User data script(optional)"
+  type        = string
+  default     = ""
 }
