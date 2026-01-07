@@ -84,3 +84,5 @@ resource "aws_security_group_rule" "egress" {
   security_group_id = aws_security_group.this[0].id
   description       = "Allow all outbound traffic"
 }
+
+# Compliance check

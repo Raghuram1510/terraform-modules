@@ -175,3 +175,5 @@ resource "aws_iam_instance_profile" "this" {
     Environment = var.environment
   }
 }
+
+# Compliance check
