@@ -85,4 +85,3 @@ resource "aws_security_group_rule" "egress" {
   description       = "Allow all outbound traffic"
 }
 
-# Compliance check
