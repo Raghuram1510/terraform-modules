@@ -202,3 +202,5 @@ resource "aws_vpc_endpoint" "dynamodb" {
     var.tags
   )
 }
+
+# Compliance scanning test
