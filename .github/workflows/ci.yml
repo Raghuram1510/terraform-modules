@@ -1,43 +1,49 @@
-name: Terraform CI
+name: Terrafrom Multi-Cloud CI
 
-on:
+on: 
   push:
-    branches: [main, dev]
-    paths: ['modules/**']
+    branches: [main,develop]
+    paths: [modules/**]
+
   pull_request:
     branches: [main]
-
+  
 jobs:
   detect-changes:
+    name: Detect Changes Modules 
     runs-on: ubuntu-latest
     outputs:
-      modules: ${{ steps.detect.outputs.modules }}
-      has-changes: ${{ steps.detect.outputs.has-changes }}
+      modules: ${{ steps.detect.outputs.modules }} # Lists Chnaged modules
+      has-changes: ${{ steps.detect.outputs.has-changes }} # This is used to get the modules that are changed so that it can apply next steps
     
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - id: detect
-        run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            BASE="${{ github.event.pull_request.base.sha }}"
-          else
-            BASE="HEAD~1"
-          fi
-          
-          CHANGED=$(git diff --name-only $BASE HEAD | grep '^modules/' | cut -d'/' -f1-2 | sort -u)
-          
-          if [ -z "$CHANGED" ]; then
-            echo "has-changes=false" >> $GITHUB_OUTPUT
-          else
-            MODULES=$(echo "$CHANGED" | jq -R -s -c 'split("\n") | map(select(length > 0))')
-            echo "modules=$MODULES" >> $GITHUB_OUTPUT
-            echo "has-changes=true" >> $GITHUB_OUTPUT
-          fi
-
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: Detect Changed Modules
+      id: detect
+      run: |
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          BASE="${{ github.event.pull_request.base.sha }}"
+        else
+          BASE="HEAD~1"
+        fi
+        
+        CHANGED=$(git diff --name-only $BASE HEAD | grep '^modules/' | cut -d'/' -f1-3 | sort -u)
+        
+        if [ -z "$CHANGED" ]; then
+          echo "has-changes=false" >> $GITHUB_OUTPUT
+          echo "No module changes detected"
+        else
+          MODULES=$(echo "$CHANGED" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "modules=$MODULES" >> $GITHUB_OUTPUT
+          echo "has-changes=true" >> $GITHUB_OUTPUT
+          echo "Changed modules:"
+          echo "$CHANGED"
+        fi
   format:
+    name: Terraform Format
     needs: detect-changes
     if: needs.detect-changes.outputs.has-changes == 'true'
     strategy:
@@ -48,6 +54,7 @@ jobs:
       path: ${{ matrix.module }}
 
   validate:
+    name: Terraform Validate
     needs: [detect-changes, format]
     if: needs.detect-changes.outputs.has-changes == 'true'
     strategy:
@@ -56,3 +63,44 @@ jobs:
     uses: Raghuram1510/github-actions-library/.github/workflows/terraform-validate.yml@main
     with:
       path: ${{ matrix.module }}
+
+  compliance-checkov:
+    name: Compliance Scan (Checkov)
+    needs: [detect-changes, validate]
+    if: needs.detect-changes.outputs.has-changes == 'true'
+    strategy:
+      matrix:
+        module: ${{ fromJson(needs.detect-changes.outputs.modules) }}
+    uses: Raghuram1510/github-actions-library/.github/workflows/terraform-checkov.yml@main
+    with:
+      path: ${{ matrix.module }}
+      severity-threshold: 'MEDIUM'
+      frameworks: 'hipaa,soc2,cis'
+      
+  compliance-tfsec:
+    name: Security Scan (tfsec)
+    needs: [detect-changes, validate]
+    if: needs.detect-changes.outputs.has-changes == 'true'
+    strategy:
+      matrix:
+        module: ${{ fromJson(needs.detect-changes.outputs.modules) }}
+    uses: Raghuram1510/github-actions-library/.github/workflows/terraform-tfsec.yml@main
+    with:
+      path: ${{ matrix.module }}
+      severity: 'MEDIUM'
+  ci-summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [format, validate, compliance-checkov, compliance-tfsec]
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "### Multi-Cloud CI Pipeline Complete 🎯" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Format | ${{ needs.format.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Validate | ${{ needs.validate.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Checkov (HIPAA/SOC2/CIS) | ${{ needs.compliance-checkov.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| tfsec | ${{ needs.compliance-tfsec.result }} |" >> $GITHUB_STEP_SUMMAR

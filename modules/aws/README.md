@@ -236,7 +236,6 @@ All modules in this repository follow these standards:
 ## 📞 Support
 
 For issues or questions:
-- Open a GitHub issue
 - Check module READMEs for detailed documentation
 - Review examples in each module directory
 
