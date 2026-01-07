@@ -1,47 +1,82 @@
-name: Terrafrom Multi-Cloud CI
+name: Terraform Multi-Cloud CI
 
-on: 
+on:
   push:
-    branches: [main,develop]
-    paths: [modules/**]
-
+    branches: [main, dev]
+    paths: ['modules/**']
   pull_request:
     branches: [main]
-  
+
 jobs:
+  # ============================================================================
+  # STEP 1: Detect which modules changed (FIXED to ignore README files)
+  # ============================================================================
   detect-changes:
-    name: Detect Changes Modules 
+    name: Detect Changed Modules
     runs-on: ubuntu-latest
     outputs:
-      modules: ${{ steps.detect.outputs.modules }} # Lists Chnaged modules
-      has-changes: ${{ steps.detect.outputs.has-changes }} # This is used to get the modules that are changed so that it can apply next steps
+      modules: ${{ steps.detect.outputs.modules }}
+      has-changes: ${{ steps.detect.outputs.has-changes }}
     
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-    - name: Detect Changed Modules
-      id: detect
-      run: |
-        if [ "${{ github.event_name }}" == "pull_request" ]; then
-          BASE="${{ github.event.pull_request.base.sha }}"
-        else
-          BASE="HEAD~1"
-        fi
-        
-        CHANGED=$(git diff --name-only $BASE HEAD | grep '^modules/' | cut -d'/' -f1-3 | sort -u)
-        
-        if [ -z "$CHANGED" ]; then
-          echo "has-changes=false" >> $GITHUB_OUTPUT
-          echo "No module changes detected"
-        else
-          MODULES=$(echo "$CHANGED" | jq -R -s -c 'split("\n") | map(select(length > 0))')
-          echo "modules=$MODULES" >> $GITHUB_OUTPUT
-          echo "has-changes=true" >> $GITHUB_OUTPUT
-          echo "Changed modules:"
-          echo "$CHANGED"
-        fi
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect Changed Modules
+        id: detect
+        run: |
+          # Determine base commit
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="HEAD~1"
+          fi
+          
+          # Get changed files in modules/
+          CHANGED_FILES=$(git diff --name-only $BASE HEAD | grep '^modules/' || true)
+          
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "has-changes=false" >> $GITHUB_OUTPUT
+            echo "No module changes detected"
+            exit 0
+          fi
+          
+          # NEW: Extract only module DIRECTORIES (not README files)
+          # Pattern: modules/cloud/module-name/ (e.g., modules/aws/vpc/)
+          MODULES=""
+          for file in $CHANGED_FILES; do
+            # Match: modules/[cloud]/[module-name]/
+            if [[ $file =~ ^modules/([^/]+)/([^/]+)/ ]]; then
+              MODULE_DIR="modules/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
+              
+              # CRITICAL: Only include if directory contains .tf files
+              # This filters out README.md and other non-Terraform files
+              if ls $MODULE_DIR/*.tf 1> /dev/null 2>&1; then
+                MODULES="$MODULES$MODULE_DIR"$'\n'
+              fi
+            fi
+          done
+          
+          # Remove duplicates and empty lines
+          MODULES=$(echo "$MODULES" | sort -u | grep -v '^$' || true)
+          
+          if [ -z "$MODULES" ]; then
+            echo "has-changes=false" >> $GITHUB_OUTPUT
+            echo "No Terraform module changes detected"
+          else
+            # Convert to JSON array for matrix strategy
+            MODULES_JSON=$(echo "$MODULES" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            echo "modules=$MODULES_JSON" >> $GITHUB_OUTPUT
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+            echo "Changed modules:"
+            echo "$MODULES"
+          fi
+
+  # ============================================================================
+  # STEP 2: Format check (runs in parallel per module)
+  # ============================================================================
   format:
     name: Terraform Format
     needs: detect-changes
@@ -53,6 +88,9 @@ jobs:
     with:
       path: ${{ matrix.module }}
 
+  # ============================================================================
+  # STEP 3: Validation (runs after format passes)
+  # ============================================================================
   validate:
     name: Terraform Validate
     needs: [detect-changes, format]
@@ -64,6 +102,10 @@ jobs:
     with:
       path: ${{ matrix.module }}
 
+  # ============================================================================
+  # STEP 4: Compliance scanning with Checkov (HIPAA, SOC2, CIS)
+  # NEW: Runs after validation, checks compliance frameworks
+  # ============================================================================
   compliance-checkov:
     name: Compliance Scan (Checkov)
     needs: [detect-changes, validate]
@@ -74,9 +116,13 @@ jobs:
     uses: Raghuram1510/github-actions-library/.github/workflows/terraform-checkov.yml@main
     with:
       path: ${{ matrix.module }}
-      severity-threshold: 'MEDIUM'
-      frameworks: 'hipaa,soc2,cis'
-      
+      severity-threshold: 'MEDIUM'        # Fail on MEDIUM, HIGH, CRITICAL
+      frameworks: 'hipaa,soc2,cis'        # Check all three compliance frameworks
+
+  # ============================================================================
+  # STEP 5: Security scanning with tfsec (fast security checks)
+  # NEW: Runs in parallel with Checkov for comprehensive coverage
+  # ============================================================================
   compliance-tfsec:
     name: Security Scan (tfsec)
     needs: [detect-changes, validate]
@@ -87,14 +133,20 @@ jobs:
     uses: Raghuram1510/github-actions-library/.github/workflows/terraform-tfsec.yml@main
     with:
       path: ${{ matrix.module }}
-      severity: 'MEDIUM'
+      severity: 'MEDIUM'                  # Report MEDIUM and above
+
+  # ============================================================================
+  # STEP 6: Summary - shows overall results
+  # Runs always (even if previous jobs fail)
+  # ============================================================================
   ci-summary:
     name: CI Summary
     runs-on: ubuntu-latest
     needs: [format, validate, compliance-checkov, compliance-tfsec]
     if: always()
+    
     steps:
-      - name: Summary
+      - name: Generate Summary
         run: |
           echo "### Multi-Cloud CI Pipeline Complete 🎯" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -103,4 +155,4 @@ jobs:
           echo "| Format | ${{ needs.format.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Validate | ${{ needs.validate.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Checkov (HIPAA/SOC2/CIS) | ${{ needs.compliance-checkov.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| tfsec | ${{ needs.compliance-tfsec.result }} |" >> $GITHUB_STEP_SUMMAR
+          echo "| tfsec | ${{ needs.compliance-tfsec.result }} |" >> $GITHUB_STEP_SUMMARY
