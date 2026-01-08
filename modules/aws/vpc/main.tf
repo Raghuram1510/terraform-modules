@@ -292,5 +292,5 @@ resource "aws_default_security_group" "default" {
     Environment = var.environment
     Compliance  = "HIPAA,SOC2,CIS"
   }
-}# Test custom Checkov policies
+} # Test custom Checkov policies
 # Trigger pipeline
