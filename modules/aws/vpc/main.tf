@@ -38,21 +38,20 @@ resource "aws_internet_gateway" "this" {
 }
 
 resource "aws_subnet" "public" {
-  count = var.create_public_subnets ? var.azs_count : 0
+  count             = length(var.public_subnet_cidrs)
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = var.public_subnet_cidrs[count.index]
+  availability_zone = var.availability_zones[count.index]
 
-  vpc_id                  = aws_vpc.this.id
-  cidr_block              = local.public_subnet_cidrs[count.index]
-  availability_zone       = local.azs[count.index]
-  map_public_ip_on_launch = var.map_public_ip_on_launch
+  # COMPLIANCE FIX: Don't auto-assign public IPs 
+  map_public_ip_on_launch = false
 
-  tags = merge(
-    {
-      Name        = "${var.vpc_name}-${var.environment}-${var.public_subnet_suffix}-${local.azs[count.index]}"
-      Environment = var.environment
-      Type        = "public"
-    },
-    var.tags
-  )
+  tags = {
+    Name        = "${var.cluster_name}-${var.environment}-public-subnet-${count.index + 1}"
+    Type        = "public"
+    Environment = var.environment
+    Compliance  = "HIPAA,SOC2,CIS"
+  }
 }
 
 resource "aws_subnet" "private" {
@@ -167,7 +166,7 @@ resource "aws_vpc_endpoint" "s3" {
   count = var.enable_s3_endpoint ? 1 : 0
 
   vpc_id       = aws_vpc.this.id
-  service_name = "com.amazonaws.${data.aws_region.current.name}.s3"
+  service_name = "com.amazonaws.${data.aws_region.current.id}.s3"
 
   route_table_ids = concat(
     aws_route_table.public[*].id,
@@ -187,7 +186,7 @@ resource "aws_vpc_endpoint" "dynamodb" {
   count = var.enable_dynamodb_endpoint ? 1 : 0
 
   vpc_id       = aws_vpc.this.id
-  service_name = "com.amazonaws.${data.aws_region.current.name}.dynamodb"
+  service_name = "com.amazonaws.${data.aws_region.current.id}.dynamodb"
 
   route_table_ids = concat(
     aws_route_table.public[*].id,
@@ -203,7 +202,64 @@ resource "aws_vpc_endpoint" "dynamodb" {
   )
 }
 
+resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
+  name              = "/aws/vpc/flow-logs/${var.cluster_name}-${var.environment}"
+  retention_in_days = 30
 
-# Compliance test
+  tags = {
+    Name        = "${var.cluster_name}-${var.environment}-vpc-flow-logs"
+    Environment = var.environment
+    Compliance  = "HIPAA,SOC2,CIS"
+  }
+}
 
-# Compliance scan
+resource "aws_iam_role" "vpc_flow_logs" {
+  name = "${var.cluster_name}-${var.environment}-vpc-flow-logs-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "vpc-flow-logs.amazonaws.com"
+      }
+    }]
+  })
+
+  tags = {
+    Name        = "${var.cluster_name}-${var.environment}-vpc-flow-logs-role"
+    Environment = var.environment
+  }
+}
+
+resource "aws_iam_role_policy" "vpc_flow_logs" {
+  name = "${var.cluster_name}-${var.environment}-vpc-flow-logs-policy"
+  role = aws_iam_role.vpc_flow_logs.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams"
+      ]
+      Effect   = "Allow"
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_flow_log" "this" {
+  iam_role_arn    = aws_iam_role.vpc_flow_logs.arn
+  log_destination = aws_cloudwatch_log_group.vpc_flow_logs.arn
+  traffic_type    = "ALL"
+  vpc_id          = aws_vpc.this.id
+
+  tags = {
+    Name        = "${var.cluster_name}-${var.environment}-vpc-flow-logs"
+    Environment = var.environment
+    Compliance  = "HIPAA,SOC2,CIS"
+  }
+}
