@@ -85,10 +85,14 @@ variable "allowed_ingress_rules" {
   default = []
 }
 
+# If true, allows unrestricted outbound traffic (dev / non-prod).
+# If false, outbound traffic is restricted to allowed_egress_rules.
+
+
 variable "allow_all_egress" {
-  description = "Allow all outbound traffic"
+  description = "Allow all outbound traffic. Set to true for dev/test, false for production."
   type        = bool
-  default     = true
+  default     = false # Secure by default (production setting)
 }
 
 variable "root_volume_size" {
@@ -103,3 +107,35 @@ variable "root_volume_type" {
   default     = "gp3"
 }
 
+# Defines allowed outbound (egress) network access.
+# Defaults to HTTPS-only to enforce least-privilege networking.
+# Additional egress ports must be explicitly declared by the caller.
+# Explicit allow-list for outbound traffic.
+# Used only when allow_all_egress = false (recommended for prod).
+
+variable "allowed_egress_rules" {
+  description = "List of allowed egress rules when allow_all_egress is false"
+  type = list(object({
+    from_port   = number
+    to_port     = number
+    protocol    = string
+    cidr_blocks = list(string)
+    description = string
+  }))
+  default = [
+    {
+      from_port   = 443
+      to_port     = 443
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+      description = "HTTPS for package updates and API calls"
+    },
+    {
+      from_port   = 80
+      to_port     = 80
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+      description = "HTTP for package repositories"
+    }
+  ]
+}

@@ -22,13 +22,13 @@ resource "aws_instance" "node" {
   # Enforce IMDSv2 to prevent SSRF-based credential theft.
   # Hop limit = 1 ensures containers/sidecars cannot access instance metadata.
   metadata_options {
-    http_endpoint               = "enabled"   
+    http_endpoint               = "enabled"
     http_tokens                 = "required"
     http_put_response_hop_limit = 1
   }
-  
+
   ebs_optimized = true
-  
+
   monitoring = true
 
   root_block_device {
