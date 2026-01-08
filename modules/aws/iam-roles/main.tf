@@ -177,3 +177,5 @@ resource "aws_iam_instance_profile" "this" {
 }
 
 # Compliance test
+
+# Compliance scan
