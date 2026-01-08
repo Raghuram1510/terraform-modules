@@ -204,3 +204,4 @@ resource "aws_vpc_endpoint" "dynamodb" {
 }
 
 
+# Compliance test
