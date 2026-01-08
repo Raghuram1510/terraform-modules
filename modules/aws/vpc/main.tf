@@ -202,9 +202,25 @@ resource "aws_vpc_endpoint" "dynamodb" {
   )
 }
 
+resource "aws_kms_key" "vpc_flow_logs" {
+  description             = "KMS key for VPC Flow Logs encryption"
+  deletion_window_in_days = 10
+  enable_key_rotation     = true
+  tags = {
+    Name        = "${var.cluster_name}-${var.environment}-vpc-flow-logs-key"
+    Environment = var.environment
+  }
+}
+
+resource "aws_kms_alias" "vpc_flow_logs" {
+  name          = "alias/${var.cluster_name}-${var.environment}-vpc-flow-logs"
+  target_key_id = aws_kms_key.vpc_flow_logs.key_id
+}
+
 resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
   name              = "/aws/vpc/flow-logs/${var.cluster_name}-${var.environment}"
-  retention_in_days = 30
+  retention_in_days = 365
+  kms_key_id        = aws_kms_key.vpc_flow_logs.arn
 
   tags = {
     Name        = "${var.cluster_name}-${var.environment}-vpc-flow-logs"
@@ -212,7 +228,6 @@ resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
     Compliance  = "HIPAA,SOC2,CIS"
   }
 }
-
 resource "aws_iam_role" "vpc_flow_logs" {
   name = "${var.cluster_name}-${var.environment}-vpc-flow-logs-role"
   assume_role_policy = jsonencode({
@@ -235,6 +250,7 @@ resource "aws_iam_role" "vpc_flow_logs" {
 resource "aws_iam_role_policy" "vpc_flow_logs" {
   name = "${var.cluster_name}-${var.environment}-vpc-flow-logs-policy"
   role = aws_iam_role.vpc_flow_logs.id
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -245,8 +261,11 @@ resource "aws_iam_role_policy" "vpc_flow_logs" {
         "logs:DescribeLogGroups",
         "logs:DescribeLogStreams"
       ]
-      Effect   = "Allow"
-      Resource = "*"
+      Effect = "Allow"
+      Resource = [
+        aws_cloudwatch_log_group.vpc_flow_logs.arn,
+        "${aws_cloudwatch_log_group.vpc_flow_logs.arn}:*"
+      ]
     }]
   })
 }
@@ -259,6 +278,17 @@ resource "aws_flow_log" "this" {
 
   tags = {
     Name        = "${var.cluster_name}-${var.environment}-vpc-flow-logs"
+    Environment = var.environment
+    Compliance  = "HIPAA,SOC2,CIS"
+  }
+}
+
+resource "aws_default_security_group" "default" {
+  vpc_id = aws_vpc.this.id
+  # No ingress or egress rules = deny all
+
+  tags = {
+    Name        = "${var.cluster_name}-${var.environment}-default-sg-deny-all"
     Environment = var.environment
     Compliance  = "HIPAA,SOC2,CIS"
   }
