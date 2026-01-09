@@ -1,3 +1,6 @@
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
 data "aws_availability_zones" "available" {
   state = "available"
 }
@@ -206,11 +209,40 @@ resource "aws_kms_key" "vpc_flow_logs" {
   description             = "KMS key for VPC Flow Logs encryption"
   deletion_window_in_days = 10
   enable_key_rotation     = true
+  
+  # Add explicit policy
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow VPC Flow Logs to use the key"
+        Effect = "Allow"
+        Principal = {
+          Service = "vpc-flow-logs.amazonaws.com"
+        }
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
   tags = {
     Name        = "${var.cluster_name}-${var.environment}-vpc-flow-logs-key"
     Environment = var.environment
   }
 }
+
 
 resource "aws_kms_alias" "vpc_flow_logs" {
   name          = "alias/${var.cluster_name}-${var.environment}-vpc-flow-logs"
