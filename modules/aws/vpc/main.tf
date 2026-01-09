@@ -293,4 +293,4 @@ resource "aws_default_security_group" "default" {
     Compliance  = "HIPAA,SOC2,CIS"
   }
 }
-# Fix artifact naming
+
