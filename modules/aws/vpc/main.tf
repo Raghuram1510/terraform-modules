@@ -1,5 +1,5 @@
-data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
 
 data "aws_availability_zones" "available" {
   state = "available"
@@ -163,8 +163,6 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private[count.index].id
 }
 
-data "aws_region" "current" {}
-
 resource "aws_vpc_endpoint" "s3" {
   count = var.enable_s3_endpoint ? 1 : 0
 
@@ -209,7 +207,7 @@ resource "aws_kms_key" "vpc_flow_logs" {
   description             = "KMS key for VPC Flow Logs encryption"
   deletion_window_in_days = 10
   enable_key_rotation     = true
-  
+
   # Add explicit policy
   policy = jsonencode({
     Version = "2012-10-17"
