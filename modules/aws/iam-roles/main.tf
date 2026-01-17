@@ -11,6 +11,20 @@ data "aws_iam_policy_document" "ec2_trust" {
   }
 }
 
+data "aws_iam_policy_document" "eks_trust" {
+  count = var.role_type == "eks" ? 1 : 0
+
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["eks.amazonaws.com"]
+    }
+  }
+}
+
 data "aws_iam_policy_document" "lambda_trust" {
   count = var.role_type == "lambda" ? 1 : 0
 
@@ -110,6 +124,7 @@ data "aws_iam_policy_document" "cross_account_trust" {
 locals {
   trust_policy = (
     var.role_type == "ec2" ? data.aws_iam_policy_document.ec2_trust.json :
+    var.role_type == "eks" ? data.aws_iam_policy_document.eks_trust[0].json :
     var.role_type == "lambda" ? data.aws_iam_policy_document.lambda_trust[0].json :
     var.role_type == "oidc" ? data.aws_iam_policy_document.oidc_trust[0].json :
     var.role_type == "irsa" ? data.aws_iam_policy_document.irsa_trust[0].json :
@@ -131,6 +146,12 @@ resource "aws_iam_role" "this" {
     RoleType    = var.role_type
     ManagedBy   = "Terraform"
   }
+}
+
+resource "aws_iam_role_policy_attachment" "eks_cluster" {
+  count      = var.role_type == "eks" ? 1 : 0
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+  role       = aws_iam_role.this.name
 }
 
 resource "aws_iam_role_policy_attachment" "eks_worker" {

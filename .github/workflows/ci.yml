@@ -163,3 +163,23 @@ jobs:
           echo "| Validate | ${{ needs.validate.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Checkov (HIPAA/SOC2/CIS) | ${{ needs.compliance-checkov.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| tfsec | ${{ needs.compliance-tfsec.result }} |" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================================
+  # JOB 7: Cleanup - Remove .terraform directories from workflow
+  # ============================================================================
+  cleanup:
+    name: Cleanup
+    runs-on: ubuntu-latest
+    needs: [ci-summary]
+    if: always()
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        
+      - name: Cleanup Terraform Files
+        run: |
+          echo "Cleaning up .terraform directories..."
+          find . -type d -name ".terraform" -exec rm -rf {} + 2>/dev/null || true
+          find . -type f -name ".terraform.lock.hcl" -delete 2>/dev/null || true
+          echo "✅ Cleanup complete!"

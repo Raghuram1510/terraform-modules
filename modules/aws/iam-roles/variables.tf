@@ -20,8 +20,8 @@ variable "role_type" {
   default     = "ec2"
 
   validation {
-    condition     = contains(["ec2", "oidc", "lambda", "irsa", "cross-account"], var.role_type)
-    error_message = "Must be: ec2, oidc, lambda, irsa, or cross-account"
+    condition     = contains(["ec2", "oidc", "lambda", "irsa", "cross-account", "eks"], var.role_type)
+    error_message = "Must be: ec2, oidc, lambda, irsa, cross-account, or eks"
   }
 }
 
