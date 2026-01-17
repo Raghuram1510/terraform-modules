@@ -3,45 +3,45 @@ data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
 
 resource "aws_eks_cluster" "this" {
-    name = "${var.cluster_name}-${var.environment}"
-    version = var.kubernetes_version
-    role_arn = var.cluster_role_arn
+  name     = "${var.cluster_name}-${var.environment}"
+  version  = var.kubernetes_version
+  role_arn = var.cluster_role_arn
 
-    vpc_config {
-        subnet_ids = var.subnet_ids
-        endpoint_private_access = var.endpoint_private_access
-        endpoint_public_access = var.endpoint_public_access
-        public_access_cidrs = var.public_access_cidrs
-        security_group_ids = var.cluster_security_group_ids
+  vpc_config {
+    subnet_ids              = var.subnet_ids
+    endpoint_private_access = var.endpoint_private_access
+    endpoint_public_access  = var.endpoint_public_access
+    public_access_cidrs     = var.public_access_cidrs
+    security_group_ids      = var.cluster_security_group_ids
+  }
+
+  encryption_config {
+    provider {
+      key_arn = aws_kms_key.eks.arn
     }
+    resources = ["secrets"]
+  }
 
-    encryption_config {
-        provider {
-            key_arn = aws_kms_key.eks.arn
-        }
-        resources = ["secrets"]
-    }
+  enabled_cluster_log_types = var.enabled_cluster_log_types
 
-    enabled_cluster_log_types = var.enabled_cluster_log_types
+  tags = merge(
+    {
+      Name        = "${var.cluster_name}-${var.environment}"
+      Environment = var.environment
+      ManagedBy   = "Terraform"
+      Compliance  = "HIPAA,SOC2,CIS"
+    },
+    var.tags,
+    var.cluster_tags
+  )
 
-    tags = merge(
-        {
-            Name = "${var.cluster_name}-${var.environment}"
-            Environment = var.environment
-            ManagedBy = "Terraform"
-            Compliance = "HIPAA,SOC2,CIS"
-        },
-        var.tags,
-        var.cluster_tags
-    )
-
-    depends_on = [aws_cloudwatch_log_group.eks]
+  depends_on = [aws_cloudwatch_log_group.eks]
 }
 
 resource "aws_kms_key" "eks" {
   description             = "KMS key for EKS secrets encryption"
   deletion_window_in_days = 7
-  enable_key_rotation     = true  # CIS requirement
+  enable_key_rotation     = true # CIS requirement
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -73,22 +73,22 @@ resource "aws_kms_alias" "eks" {
 # Only created if logging is enabled
 
 resource "aws_cloudwatch_log_group" "eks" {
-    count = length(var.enabled_cluster_log_types) > 0 ? 1 : 0
-    name = "/aws/eks/${var.cluster_name}-${var.environment}"
-    retention_in_days = var.log_retention_days
+  count             = length(var.enabled_cluster_log_types) > 0 ? 1 : 0
+  name              = "/aws/eks/${var.cluster_name}-${var.environment}"
+  retention_in_days = var.log_retention_days
 
-    tags = {
-        Name = "${var.cluster_name}-${var.environment}-eks-logs"
-        Environment = var.environment
-        Compliance  = "HIPAA,SOC2,CIS"
-    }
+  tags = {
+    Name        = "${var.cluster_name}-${var.environment}-eks-logs"
+    Environment = var.environment
+    Compliance  = "HIPAA,SOC2,CIS"
+  }
 }
 
 # Enables pods to assume IAM roles securely
 # Required for: Crossplane, ArgoCD, AWS LB Controller
 
 data "tls_certificate" "this" {
-    url = aws_eks_cluster.this.identity[0].oidc[0].issuer
+  url = aws_eks_cluster.this.identity[0].oidc[0].issuer
 }
 
 resource "aws_iam_openid_connect_provider" "eks" {
@@ -105,13 +105,13 @@ resource "aws_iam_openid_connect_provider" "eks" {
 # Only created if enable_managed_node_group = true
 # Alternative: Use your Compute module for self-managed nodes
 resource "aws_eks_node_group" "this" {
-  count = var.enable_managed_node_group ? 1 : 0
+  count           = var.enable_managed_node_group ? 1 : 0
   cluster_name    = aws_eks_cluster.this.name
   node_group_name = "${var.cluster_name}-${var.environment}-nodes"
   node_role_arn   = var.node_role_arn
   subnet_ids      = var.subnet_ids
-  instance_types = var.node_instance_types
-  disk_size      = var.node_disk_size
+  instance_types  = var.node_instance_types
+  disk_size       = var.node_disk_size
   scaling_config {
     desired_size = var.node_desired_size
     min_size     = var.node_min_size
@@ -139,11 +139,11 @@ resource "aws_eks_node_group" "this" {
 # HIPAA/CIS: Enforce IMDSv2 to prevent SSRF credential theft
 resource "aws_launch_template" "eks_nodes" {
   count = var.enable_managed_node_group ? 1 : 0
-  name = "${var.cluster_name}-${var.environment}-eks-nodes"
+  name  = "${var.cluster_name}-${var.environment}-eks-nodes"
   # COMPLIANCE: Enforce IMDSv2
   metadata_options {
     http_endpoint               = "enabled"
-    http_tokens                 = "required"  # Forces IMDSv2
+    http_tokens                 = "required" # Forces IMDSv2
     http_put_response_hop_limit = 1
   }
   # COMPLIANCE: Encrypted root volume
@@ -169,20 +169,20 @@ resource "aws_launch_template" "eks_nodes" {
 # Only needed if using Compute module (self-managed nodes)
 # Allows communication between control plane and workers
 resource "aws_security_group" "node" {
-  count = var.enable_managed_node_group ? 0 : 1
+  count       = var.enable_managed_node_group ? 0 : 1
   name        = "${var.cluster_name}-${var.environment}-node-sg"
   description = "Security group for EKS worker nodes"
   vpc_id      = var.vpc_id
   tags = {
-    Name        = "${var.cluster_name}-${var.environment}-node-sg"
-    Environment = var.environment
-    Compliance  = "HIPAA,SOC2,CIS"
+    Name                                                           = "${var.cluster_name}-${var.environment}-node-sg"
+    Environment                                                    = var.environment
+    Compliance                                                     = "HIPAA,SOC2,CIS"
     "kubernetes.io/cluster/${var.cluster_name}-${var.environment}" = "owned"
   }
 }
 # Allow nodes to communicate with each other
 resource "aws_security_group_rule" "node_to_node" {
-  count = var.enable_managed_node_group ? 0 : 1
+  count                    = var.enable_managed_node_group ? 0 : 1
   type                     = "ingress"
   from_port                = 0
   to_port                  = 65535
@@ -193,7 +193,7 @@ resource "aws_security_group_rule" "node_to_node" {
 }
 # Allow control plane to communicate with nodes
 resource "aws_security_group_rule" "control_plane_to_node" {
-  count = var.enable_managed_node_group ? 0 : 1
+  count                    = var.enable_managed_node_group ? 0 : 1
   type                     = "ingress"
   from_port                = 443
   to_port                  = 443
@@ -203,7 +203,7 @@ resource "aws_security_group_rule" "control_plane_to_node" {
   description              = "Control plane to nodes (HTTPS)"
 }
 resource "aws_security_group_rule" "control_plane_to_node_kubelet" {
-  count = var.enable_managed_node_group ? 0 : 1
+  count                    = var.enable_managed_node_group ? 0 : 1
   type                     = "ingress"
   from_port                = 10250
   to_port                  = 10250
@@ -214,7 +214,7 @@ resource "aws_security_group_rule" "control_plane_to_node_kubelet" {
 }
 # Allow nodes to reach control plane
 resource "aws_security_group_rule" "node_to_control_plane" {
-  count = var.enable_managed_node_group ? 0 : 1
+  count                    = var.enable_managed_node_group ? 0 : 1
   type                     = "ingress"
   from_port                = 443
   to_port                  = 443
@@ -225,7 +225,7 @@ resource "aws_security_group_rule" "node_to_control_plane" {
 }
 # Allow all outbound (nodes need internet for ECR, etc.)
 resource "aws_security_group_rule" "node_egress" {
-  count = var.enable_managed_node_group ? 0 : 1
+  count             = var.enable_managed_node_group ? 0 : 1
   type              = "egress"
   from_port         = 0
   to_port           = 0
