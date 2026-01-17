@@ -15,7 +15,7 @@ variable "role_name" {
 }
 
 variable "role_type" {
-  description = "Type: ec2, oidc, lambda, irsa, cross-account"
+  description = "Type: ec2, oidc, lambda, irsa, cross-account, eks"
   type        = string
   default     = "ec2"
 

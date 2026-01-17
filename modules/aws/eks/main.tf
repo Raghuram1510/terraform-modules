@@ -67,21 +67,25 @@ resource "aws_kms_key" "eks" {
 resource "aws_kms_alias" "eks" {
   name          = "alias/${var.cluster_name}-${var.environment}-eks"
   target_key_id = aws_kms_key.eks.key_id
+  
+  # Note: aws_kms_alias doesn't support tags - this is a Checkov false positive
+  # KMS aliases inherit permissions from their target key
 }
 
 # COMPLIANCE: Audit logging for HIPAA/SOC2
 # Only created if logging is enabled
 
 resource "aws_cloudwatch_log_group" "eks" {
-  count             = length(var.enabled_cluster_log_types) > 0 ? 1 : 0
-  name              = "/aws/eks/${var.cluster_name}-${var.environment}"
-  retention_in_days = var.log_retention_days
+    count = length(var.enabled_cluster_log_types) > 0 ? 1 : 0
+    name = "/aws/eks/${var.cluster_name}-${var.environment}/cluster"
+    retention_in_days = var.log_retention_days
+    kms_key_id = aws_kms_key.eks.arn  # <-- ADD THIS LINE
 
-  tags = {
-    Name        = "${var.cluster_name}-${var.environment}-eks-logs"
-    Environment = var.environment
-    Compliance  = "HIPAA,SOC2,CIS"
-  }
+    tags = {
+        Name = "${var.cluster_name}-${var.environment}-eks-logs"
+        Environment = var.environment
+        Compliance  = "HIPAA,SOC2,CIS"
+    }
 }
 
 # Enables pods to assume IAM roles securely

@@ -1,3 +1,16 @@
+variable "deployment_mode" {
+  description = "Deployment mode: 'development' or 'production'"
+  type        = string
+  default     = "development"
+  
+  validation {
+    condition     = contains(["development", "production"], var.deployment_mode)
+    error_message = "Must be 'development' or 'production'"
+  }
+  # development: Public endpoint enabled, open CIDRs
+  # production: Private only, restricted egress
+}
+
 variable "cluster_name" {
   description = "Name of the EKS cluster"
   type        = string
@@ -89,7 +102,7 @@ variable "kubernetes_version" {
 variable "enabled_cluster_log_types" {
   description = "Control plane log types to enable"
   type        = list(string)
-  default     = []
+  default     = ["api", "audit"]
   # Free tier: [] (saves CloudWatch costs)
   # Production: ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 }
@@ -138,14 +151,14 @@ variable "endpoint_public_access" {
   description = "Enable public API endpoint (access from internet)"
   type        = bool
   default     = true
-  # true = kubectl works from your laptop
   # Production: set false and use VPN/bastion
 }
 
 variable "public_access_cidrs" {
   description = "CIDRs allowed to access public endpoint"
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  default     = ["0.0.0.0/0"]  # <-- CHANGE from [] to ["0.0.0.0/0"]
+  # Development: ["0.0.0.0/0"] (access from anywhere)
   # Production: restrict to your IP ["YOUR.IP.ADDRESS/32"]
 }
 
