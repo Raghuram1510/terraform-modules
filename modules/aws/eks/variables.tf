@@ -2,7 +2,7 @@ variable "deployment_mode" {
   description = "Deployment mode: 'development' or 'production'"
   type        = string
   default     = "development"
-  
+
   validation {
     condition     = contains(["development", "production"], var.deployment_mode)
     error_message = "Must be 'development' or 'production'"
@@ -157,7 +157,7 @@ variable "endpoint_public_access" {
 variable "public_access_cidrs" {
   description = "CIDRs allowed to access public endpoint"
   type        = list(string)
-  default     = ["0.0.0.0/0"]  # <-- CHANGE from [] to ["0.0.0.0/0"]
+  default     = ["0.0.0.0/0"] # <-- CHANGE from [] to ["0.0.0.0/0"]
   # Development: ["0.0.0.0/0"] (access from anywhere)
   # Production: restrict to your IP ["YOUR.IP.ADDRESS/32"]
 }
